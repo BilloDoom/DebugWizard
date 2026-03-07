@@ -12,9 +12,14 @@ var is_jumping: bool = false
 var jump_timer: float = 0.0
 var health: float = 100.0
 
+@onready var button: Button = $Control/Button
+
 func _ready() -> void:
 	# Wait a frame for debug_ui to initialize
 	await get_tree().process_frame
+	
+	# Connect button for scene transition
+	button.pressed.connect(_on_button_pressed)
 	
 	# Create a label for basic stats
 	DebugWizard.create_label("stats", "main")
@@ -81,5 +86,5 @@ func _process(delta: float) -> void:
 	})
 
 
-func _on_visibility_changed() -> void:
-	pass # Replace with function body.
+func _on_button_pressed() -> void:
+	get_tree().change_scene_to_file("res://node_2d.tscn")
