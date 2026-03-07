@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3 uid="uid://dxva516w2hd8n"]
+
+[ext_resource type="Script" uid="uid://ve033jxwdgsn" path="res://addons/debugWizard/debug_graph.gd" id="1_mk3g6"]
+[ext_resource type="Script" uid="uid://2caf17gy1tri" path="res://addons/debugWizard/system/draw_graph.gd" id="2_draw"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_mfipx"]
+
+[node name="PanelContainer" type="PanelContainer"]
+offset_right = 40.0
+offset_bottom = 40.0
+theme_override_styles/panel = SubResource("StyleBoxEmpty_mfipx")
+script = ExtResource("1_mk3g6")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Panel" type="Control" parent="HBoxContainer"]
+custom_minimum_size = Vector2(200, 50)
+layout_mode = 2
+script = ExtResource("2_draw")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HBoxContainer"]
+layout_mode = 2
