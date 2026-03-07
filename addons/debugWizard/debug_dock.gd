@@ -18,15 +18,16 @@ enum SignalType { LABEL, LINE, STEP }
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		return
+	
 	type_option.clear()
 	type_option.add_item("Label", SignalType.LABEL)
 	type_option.add_item("Line (Graph)", SignalType.LINE)
 	type_option.add_item("Step (Graph)", SignalType.STEP)
 
-	# Get the signal icon from the editor theme
 	_signal_icon = EditorInterface.get_editor_theme().get_icon("Signal", "EditorIcons")
-	
-	# Setup tree
+
 	signal_tree.columns = 2
 	signal_tree.set_column_expand(0, true)
 	signal_tree.set_column_expand(1, false)
@@ -34,7 +35,9 @@ func _ready() -> void:
 	signal_tree.hide_root = true
 	signal_tree.button_clicked.connect(_on_tree_button_clicked)
 
-	EditorInterface.get_selection().selection_changed.connect(_on_selection_changed)
+	var selection = EditorInterface.get_selection()
+	if not selection.selection_changed.is_connected(_on_selection_changed):
+		selection.selection_changed.connect(_on_selection_changed)
 
 	_load_registry()
 	_refresh_list()
@@ -52,62 +55,92 @@ func _on_selection_changed() -> void:
 
 	_selected_node = selected[0]
 	selected_node_label.text = _get_runtime_path(_selected_node)
-	_populate_signal_list(_selected_node)
+	_populate_signal_tree(_selected_node)
 
 
 func _get_runtime_path(node: Node) -> String:
 	var scene_root = EditorInterface.get_edited_scene_root()
 	if not scene_root:
 		return ""
-	
 	if node == scene_root:
 		return "/root/" + scene_root.name
-	
 	var relative_path = scene_root.get_path_to(node)
 	return "/root/" + scene_root.name + "/" + str(relative_path)
 
 
-func _populate_signal_list(node: Node) -> void:
+# --- Signal Tree ---
+
+func _populate_signal_tree(node: Node) -> void:
 	signal_tree.clear()
 	var root = signal_tree.create_item()
 
-	var signals: Array = []
-	if node.get_script():
-		signals = node.get_script().get_script_signal_list()
-	
-	# also include built-in signals
-	for sig in node.get_signal_list():
-		var already = false
-		for s in signals:
-			if s.name == sig.name:
-				already = true
-				break
-		if not already:
-			signals.append(sig)
+	var grouped: Dictionary = {}  # group_name -> Array of signal dicts
 
-	if signals.is_empty():
+	# Script signals first
+	if node.get_script():
+		var script = node.get_script()
+		var script_signals = script.get_script_signal_list()
+		if not script_signals.is_empty():
+			var script_name = script.resource_path.get_file().get_basename()
+			grouped[script_name] = script_signals
+
+	# Built-in signals grouped by declaring class
+	for sig in node.get_signal_list():
+		# skip if already in script signals
+		var in_script = false
+		for group in grouped.values():
+			for s in group:
+				if s.name == sig.name:
+					in_script = true
+					break
+
+		if in_script:
+			continue
+
+		var declaring_class = _find_declaring_class(sig.name, node)
+		if not grouped.has(declaring_class):
+			grouped[declaring_class] = []
+		grouped[declaring_class].append(sig)
+
+	if grouped.is_empty():
 		var item = signal_tree.create_item(root)
 		item.set_text(0, "No signals found")
 		item.set_selectable(0, false)
 		return
 
 	var runtime_path = _get_runtime_path(node)
-	for sig in signals:
-		var unique_id = "%s::%s" % [runtime_path, sig.name]
-		var already_tracked = registered_signals.has(unique_id)
-		
-		var item = signal_tree.create_item(root)
-		
-		# Format signal like Godot does: signal_name(arg: type, ...)
-		var sig_text = _format_signal(sig)
-		item.set_icon(0, _signal_icon)
-		item.set_text(0, sig_text)
-		item.set_metadata(0, sig.name)
-		
-		# Add track/untrack button
-		var btn_icon = EditorInterface.get_editor_theme().get_icon("Remove", "EditorIcons") if already_tracked else EditorInterface.get_editor_theme().get_icon("Add", "EditorIcons")
-		item.add_button(1, btn_icon, 0, false, "Untrack" if already_tracked else "Track")
-		item.set_metadata(1, unique_id)
+
+	for group_name in grouped:
+		# Group header
+		var header = signal_tree.create_item(root)
+		header.set_text(0, group_name)
+		header.set_selectable(0, false)
+		header.set_selectable(1, false)
+
+		for sig in grouped[group_name]:
+			var unique_id = "%s::%s" % [runtime_path, sig.name]
+			var already_tracked = registered_signals.has(unique_id)
+
+			var item = signal_tree.create_item(header)
+			item.set_icon(0, _signal_icon)
+			item.set_text(0, _format_signal(sig))
+			item.set_metadata(0, sig.name)
+			item.set_metadata(1, unique_id)
+
+			var btn_icon = EditorInterface.get_editor_theme().get_icon(
+				"Remove" if already_tracked else "Add", "EditorIcons"
+			)
+			item.add_button(1, btn_icon, 0, false, "Untrack" if already_tracked else "Track")
+
+
+func _find_declaring_class(signal_name: String, node: Node) -> String:
+	var cls = node.get_class()
+	while cls != "":
+		var parent = ClassDB.get_parent_class(cls)
+		if ClassDB.class_has_signal(cls, signal_name) and not ClassDB.class_has_signal(parent, signal_name):
+			return cls
+		cls = parent
+	return "Unknown"
 
 
 func _format_signal(sig: Dictionary) -> String:
@@ -116,10 +149,7 @@ func _format_signal(sig: Dictionary) -> String:
 		var arg_parts = []
 		for arg in sig.args:
 			var type_name = _get_type_name(arg.type)
-			if type_name.is_empty():
-				arg_parts.append(arg.name)
-			else:
-				arg_parts.append("%s: %s" % [arg.name, type_name])
+			arg_parts.append("%s: %s" % [arg.name, type_name] if not type_name.is_empty() else arg.name)
 		args_str = ", ".join(arg_parts)
 	return "%s(%s)" % [sig.name, args_str]
 
@@ -141,10 +171,10 @@ func _get_type_name(type: int) -> String:
 func _on_tree_button_clicked(item: TreeItem, column: int, id: int, mouse_button: int) -> void:
 	if mouse_button != MOUSE_BUTTON_LEFT:
 		return
-	
+
 	var signal_name = item.get_metadata(0)
 	var unique_id = item.get_metadata(1)
-	
+
 	if registered_signals.has(unique_id):
 		_on_remove_pressed(unique_id)
 	else:
@@ -186,7 +216,7 @@ func _on_remove_pressed(unique_id: String) -> void:
 		print("DebugWizard: Unregistered '%s'" % unique_id)
 
 
-# --- Registered list ---
+# --- Registered List ---
 
 func _refresh_list() -> void:
 	for child in registered_list.get_children():
@@ -196,9 +226,8 @@ func _refresh_list() -> void:
 		var data = registered_signals[unique_id]
 		registered_list.add_child(_create_list_entry(unique_id, data))
 
-	# refresh signal list buttons to reflect current tracked state
 	if _selected_node and is_instance_valid(_selected_node):
-		_populate_signal_list(_selected_node)
+		_populate_signal_tree(_selected_node)
 
 
 func _create_list_entry(unique_id: String, data: Dictionary) -> HBoxContainer:

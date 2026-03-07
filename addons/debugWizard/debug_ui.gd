@@ -106,7 +106,10 @@ func _do_connect(node: Node, node_path: String, signal_name: String, display_nam
 
 
 func _on_label_signal(value, display_name: String) -> void:
-	send_args(display_name, { "value": value })
+	var formatted_value = value
+	if typeof(value) == TYPE_FLOAT:
+		formatted_value = "%.2f" % value
+	send_args(display_name, { display_name: formatted_value })
 
 
 func _on_line_signal(value: float, display_name: String) -> void:
