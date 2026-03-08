@@ -1,7 +1,8 @@
 @tool
 extends Control
 
-const SAVE_PATH = "res://addons/debugWizard/signal_registry.cfg"
+const DATA_DIR = "res://addons/debugWizard/data/"
+const SAVE_PATH = DATA_DIR + "signal_registry.cfg"
 
 @onready var display_name_edit: LineEdit = $VBoxContainer/AddSection/DisplayNameEdit
 @onready var type_option: OptionButton = $VBoxContainer/AddSection/TypeContainer/TypeOption
@@ -14,7 +15,7 @@ var registered_signals: Dictionary = {}
 var _selected_node: Node = null
 var _signal_icon: Texture2D
 
-enum SignalType { LABEL, LINE, STEP }
+enum SignalType { LABEL, LINE, _STEP }
 
 
 func _ready() -> void:
@@ -24,7 +25,8 @@ func _ready() -> void:
 	type_option.clear()
 	type_option.add_item("Label", SignalType.LABEL)
 	type_option.add_item("Line (Graph)", SignalType.LINE)
-	type_option.add_item("Step (Graph)", SignalType.STEP)
+	# Step is hidden until functional
+	#type_option.add_item("Step (Graph)", SignalType._STEP)
 
 	_signal_icon = EditorInterface.get_editor_theme().get_icon("Signal", "EditorIcons")
 

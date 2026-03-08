@@ -5,7 +5,8 @@ class_name DebugRegistryClass
 ## Game scripts call watch/unwatch/dispatch here
 ## DebugUi reads from here each frame
 
-const REGISTRY_PATH = "res://addons/debugWizard/signal_registry.cfg"
+const DATA_DIR = "res://addons/debugWizard/data/"
+const REGISTRY_PATH = DATA_DIR + "signal_registry.cfg"
 
 enum DisplayType { LABEL = 0, LINE = 1, _STEP = 2 }
 
