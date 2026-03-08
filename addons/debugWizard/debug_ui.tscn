@@ -1,7 +1,7 @@
 [gd_scene load_steps=6 format=3 uid="uid://l3m624yxh6ud"]
 
 [ext_resource type="Script" uid="uid://bt1gpsmedmkxc" path="res://addons/debugWizard/debug_ui.gd" id="1_k61it"]
-[ext_resource type="PackedScene" uid="uid://n2m223n3t54c" path="res://addons/debugWizard/debug_graph.tscn" id="2_bth2w"]
+[ext_resource type="PackedScene" uid="uid://dxva516w2hd8n" path="res://addons/debugWizard/debug_graph.tscn" id="2_bth2w"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ombck"]
 bg_color = Color(0.12834376, 0.12834376, 0.1283437, 0.31764707)
@@ -25,17 +25,21 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 theme = SubResource("Theme_k61it")
 script = ExtResource("1_k61it")
 debug_graph = ExtResource("2_bth2w")
 
 [node name="PanelContainer" type="PanelContainer" parent="."]
-layout_mode = 0
-offset_right = 310.0
-offset_bottom = 154.0
+layout_mode = 1
+offset_right = 200.0
+offset_bottom = 100.0
 
 [node name="MarginContainer" type="MarginContainer" parent="PanelContainer"]
 layout_mode = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="ResizeHandle" type="Control" parent="PanelContainer"]
 layout_mode = 2

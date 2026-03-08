@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+DebugRegistry="*res://addons/debugWizard/debug_registry.gd"
 DebugWizard="*res://addons/debugWizard/debug_ui.tscn"
 
 [editor_plugins]

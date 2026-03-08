@@ -1,18 +1,23 @@
 @tool
 extends EditorPlugin
 
-const AUTOLOAD_NAME = "DebugWizard"
-const AUTOLOAD_PATH = "res://addons/debugWizard/debug_ui.tscn"
+const REGISTRY_NAME = "DebugRegistry"
+const REGISTRY_PATH = "res://addons/debugWizard/debug_registry.gd"
+const UI_NAME = "DebugWizard"
+const UI_PATH = "res://addons/debugWizard/debug_ui.tscn"
 
 var dock
 
 
 func _enable_plugin() -> void:
-	add_autoload_singleton(AUTOLOAD_NAME, AUTOLOAD_PATH)
+	# Registry must be added first (DebugUi depends on it)
+	add_autoload_singleton(REGISTRY_NAME, REGISTRY_PATH)
+	add_autoload_singleton(UI_NAME, UI_PATH)
 
 
 func _disable_plugin() -> void:
-	remove_autoload_singleton(AUTOLOAD_NAME)
+	remove_autoload_singleton(UI_NAME)
+	remove_autoload_singleton(REGISTRY_NAME)
 
 
 func _enter_tree() -> void:

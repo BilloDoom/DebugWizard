@@ -1,36 +1,40 @@
 extends Control
 
-const REGISTRY_PATH = "res://addons/debugWizard/signal_registry.cfg"
+## DebugUi - Visual display for debug data
+## Reads from DebugRegistry each frame, never called directly by game scripts
 
-enum SignalType { LABEL, LINE, STEP }
-
-var registry: Dictionary = {}
-var signal_connections: Dictionary = {}  # Tracks connected signals
-var _current_scene: Node = null
-var _cleanup_scheduled: bool = false
+const DisplayType = DebugRegistryClass.DisplayType
 
 @onready var parent: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer
 @export var debug_graph: PackedScene
 
+# Registry entries: { name: { node: Control, type: String, group: String } }
+var _registry: Dictionary = {}
+
+# Track which signal displays exist: { display_name: true }
+var _signal_displays: Dictionary = {}
+
+var _debug_registry: Node = null
+
 
 func _ready() -> void:
-	for child in parent.get_children():
-		registry[child.name] = child
-	
-	# Wait for scene tree to be ready, then connect registered signals
-	get_tree().process_frame.connect(_on_first_frame, CONNECT_ONE_SHOT)
+	_debug_registry = get_node_or_null("/root/DebugRegistry")
+
+	if _debug_registry:
+		_debug_registry.event_dispatched.connect(_on_event_dispatched)
+		_debug_registry.scene_changed.connect(_on_scene_changed)
+		call_deferred("_init_signal_displays")
 
 
 func _process(_delta: float) -> void:
-	# Check for scene change
-	var current = get_tree().current_scene
-	if current != _current_scene:
-		_current_scene = current
-		_on_scene_changed()
+	if not _debug_registry:
+		return
 
+	var watched = _debug_registry.get_watched()
 
-func _on_first_frame() -> void:
-	_load_and_connect_signals()
+	for label in watched.keys():
+		var data = watched[label]
+		_update_display(label, data["value"], data["type"], data["color"])
 
 
 func _input(event: InputEvent) -> void:
@@ -38,236 +42,250 @@ func _input(event: InputEvent) -> void:
 		visible = !visible
 
 
-func _load_and_connect_signals() -> void:
-	var config = ConfigFile.new()
-	var err = config.load(REGISTRY_PATH)
-	
-	if err != OK:
+# =============================================================================
+# DISPLAY MANAGEMENT
+# =============================================================================
+
+func _init_signal_displays() -> void:
+	if not _debug_registry:
 		return
-	
-	for section in config.get_sections():
-		var node_path = config.get_value(section, "node_path", "")
-		var signal_name = config.get_value(section, "signal_name", "")
-		var display_name = config.get_value(section, "display_name", "")
-		var sig_type = config.get_value(section, "type", SignalType.LABEL)
-		var color = config.get_value(section, "color", Color.WHITE)
-		
-		_connect_signal(node_path, signal_name, display_name, sig_type, color)
+
+	var connections = _debug_registry.get_signal_connections()
+
+	for unique_id in connections.keys():
+		var data = connections[unique_id]
+		_ensure_display_exists(data["display_name"], data["type"], data["color"])
+		_signal_displays[data["display_name"]] = true
 
 
-func _connect_signal(node_path: String, signal_name: String, display_name: String, sig_type: int, color: Color) -> void:
-	var node = get_node_or_null(node_path)
-	if not node:
-		# Try to find it when scene is fully loaded
-		call_deferred("_deferred_connect_signal", node_path, signal_name, display_name, sig_type, color)
+func _ensure_display_exists(label: String, display_type: int, color: Color) -> void:
+	match display_type:
+		DisplayType.LABEL:
+			if not _registry.has(label):
+				_create_label(label)
+		DisplayType.LINE:
+			if not _registry.has("signal_graph"):
+				_create_graph("signal_graph")
+			_register_line("signal_graph", label, color)
+		DisplayType._STEP:
+			if not _registry.has("signal_graph"):
+				_create_graph("signal_graph")
+			__register_step("signal_graph", label, color)
+
+
+func _update_display(label: String, value, display_type: int, color: Color) -> void:
+	_ensure_display_exists(label, display_type, color)
+
+	match display_type:
+		DisplayType.LABEL: _update_label(label, value)
+		DisplayType.LINE: _update_line(label, value)
+		DisplayType._STEP: __update_step(label, value)
+
+
+func _update_label(label: String, value) -> void:
+	if not _registry.has(label):
 		return
-	
-	_do_connect(node, node_path, signal_name, display_name, sig_type, color)
 
-
-func _deferred_connect_signal(node_path: String, signal_name: String, display_name: String, sig_type: int, color: Color) -> void:
-	# Wait a bit for scene to load
-	await get_tree().create_timer(0.1).timeout
-	
-	var node = get_node_or_null(node_path)
-	if not node:
-		push_warning("DebugWizard: Could not find node at path '%s'" % node_path)
+	var entry = _registry[label]
+	if entry["type"] != "label":
 		return
-	
-	_do_connect(node, node_path, signal_name, display_name, sig_type, color)
 
-
-func _do_connect(node: Node, node_path: String, signal_name: String, display_name: String, sig_type: int, color: Color) -> void:
-	if not node.has_signal(signal_name):
-		push_warning("DebugWizard: Node '%s' does not have signal '%s'" % [node_path, signal_name])
-		return
-	
-	var unique_id = "%s::%s" % [node_path, signal_name]
-	
-	# Prevent duplicate connections
-	if signal_connections.has(unique_id):
-		return
-	
-	# Setup display based on type
-	match sig_type:
-		SignalType.LABEL:
-			create_label(display_name, "signals")
-			var callable = _on_label_signal.bind(display_name)
-			node.connect(signal_name, callable)
-			signal_connections[unique_id] = { "node": node, "signal": signal_name, "callable": callable, "display_name": display_name, "type": sig_type }
-		
-		SignalType.LINE:
-			if not registry.has("signal_graph"):
-				create_graph("signal_graph", "signals")
-			register_line("signal_graph", display_name, color, 0.0, 100.0)
-			var callable = _on_line_signal.bind(display_name)
-			node.connect(signal_name, callable)
-			signal_connections[unique_id] = { "node": node, "signal": signal_name, "callable": callable, "display_name": display_name, "type": sig_type }
-		
-		SignalType.STEP:
-			if not registry.has("signal_graph"):
-				create_graph("signal_graph", "signals")
-			register_step("signal_graph", display_name, color)
-			var callable = _on_step_signal.bind(display_name)
-			node.connect(signal_name, callable)
-			signal_connections[unique_id] = { "node": node, "signal": signal_name, "callable": callable, "display_name": display_name, "type": sig_type }
-	
-	print("DebugWizard: Connected to signal '%s' on '%s'" % [signal_name, node_path])
-
-
-func _on_label_signal(value, display_name: String) -> void:
-	var formatted_value = value
+	var formatted = value
 	if typeof(value) == TYPE_FLOAT:
-		formatted_value = "%.2f" % value
-	send_args(display_name, { display_name: formatted_value })
+		formatted = "%.2f" % value
+
+	entry["node"].text = "%s: %s" % [label, str(formatted)]
 
 
-func _on_line_signal(value: float, display_name: String) -> void:
-	send_args("signal_graph", { display_name: value })
-
-
-func _on_step_signal(triggered: bool, display_name: String) -> void:
-	send_args("signal_graph", { display_name: triggered })
-
-
-func disconnect_all_signals() -> void:
-	for unique_id in signal_connections.keys():
-		var data = signal_connections[unique_id]
-		if is_instance_valid(data.node):
-			data.node.disconnect(data.signal, data.callable)
-	signal_connections.clear()
-
-
-func _on_scene_changed() -> void:
-	# Defer cleanup to ensure scene is fully loaded
-	call_deferred("_cleanup_invalid_entries")
-
-
-func _cleanup_invalid_entries() -> void:
-	# Clean up signal connections for nodes that no longer exist
-	var signals_to_remove: Array = []
-	
-	for unique_id in signal_connections.keys():
-		var data = signal_connections[unique_id]
-		if not is_instance_valid(data.node):
-			signals_to_remove.append(unique_id)
-	
-	for unique_id in signals_to_remove:
-		var data = signal_connections[unique_id]
-		var display_name = data.get("display_name", "")
-		var sig_type = data.get("type", -1)
-		
-		signal_connections.erase(unique_id)
-		
-		# Remove UI element based on type
-		if sig_type == SignalType.LABEL:
-			_remove_registry_entry(display_name)
-		elif sig_type in [SignalType.LINE, SignalType.STEP]:
-			if registry.has("signal_graph"):
-				var graph_node = registry["signal_graph"]["node"]
-				if sig_type == SignalType.LINE:
-					graph_node.graph.lines.erase(display_name)
-				else:
-					graph_node.graph.steps.erase(display_name)
-				graph_node.remove_legend(display_name)
-				
-				if graph_node.graph.lines.is_empty() and graph_node.graph.steps.is_empty():
-					_remove_registry_entry("signal_graph")
-	
-	# Clean up registry entries (function-registered) that have invalid nodes
-	var registry_to_remove: Array = []
-	
-	for entry_name in registry.keys():
-		var entry = registry[entry_name]
-		# Check if this entry has an associated owner node that's no longer valid
-		if entry.has("owner") and not is_instance_valid(entry["owner"]):
-			registry_to_remove.append(entry_name)
-	
-	for entry_name in registry_to_remove:
-		_remove_registry_entry(entry_name)
-	
-	# Try to reconnect signals for the new scene
-	_load_and_connect_signals()
-
-
-func _remove_registry_entry(entry_name: String) -> void:
-	if not registry.has(entry_name):
+func _update_line(label: String, value) -> void:
+	if not _registry.has("signal_graph"):
 		return
-	
-	var entry = registry[entry_name]
-	var node = entry["node"]
-	
-	if is_instance_valid(node):
-		node.queue_free()
-	
-	registry.erase(entry_name)
 
-
-func create_graph(graph_name: String, group: String = "default", owner_node: Node = null) -> void:
-	if registry.has(graph_name):
-		push_warning("graph " + graph_name + " already exists")
+	var graph_entry = _registry["signal_graph"]
+	if graph_entry["type"] != "graph":
 		return
+
+	if typeof(value) in [TYPE_FLOAT, TYPE_INT]:
+		graph_entry["node"].graph.add_line_value(label, float(value))
+
+
+func __update_step(label: String, value) -> void:
+	if not _registry.has("signal_graph"):
+		return
+
+	var graph_entry = _registry["signal_graph"]
+	if graph_entry["type"] != "graph":
+		return
+
+	var triggered: bool = false
+	if typeof(value) == TYPE_BOOL:
+		triggered = value
+	elif value:
+		triggered = true
+
+	graph_entry["node"].graph.add_step_value(label, triggered)
+
+
+# =============================================================================
+# EVENT HANDLER
+# =============================================================================
+
+func _on_event_dispatched(category: String, data: Dictionary) -> void:
+	var display_type: int = data.get("_type", DisplayType.LABEL)
+
+	match display_type:
+		DisplayType.LABEL:
+			_ensure_display_exists(category, DisplayType.LABEL, Color.WHITE)
+			if _registry.has(category) and _registry[category]["type"] == "label":
+				var text_parts: Array = []
+				for key in data.keys():
+					if key.begins_with("_"):
+						continue
+					var val = data[key]
+					if typeof(val) == TYPE_FLOAT:
+						val = "%.2f" % val
+					text_parts.append("%s=%s" % [key, str(val)])
+				_registry[category]["node"].text = ", ".join(text_parts)
+
+		DisplayType.LINE:
+			_ensure_display_exists(category, DisplayType.LINE, data.get("color", Color.WHITE))
+			_update_line(category, data.get("value", 0.0))
+
+		DisplayType._STEP:
+			_ensure_display_exists(category, DisplayType._STEP, data.get("color", Color.WHITE))
+			__update_step(category, data.get("triggered", true))
+
+
+# =============================================================================
+# CREATE UI ELEMENTS
+# =============================================================================
+
+func _create_label(lbl_name: String, group: String = "default") -> void:
+	if _registry.has(lbl_name):
+		return
+
+	var l = Label.new()
+	l.name = lbl_name
+	l.text = lbl_name + ": --"
+	parent.add_child(l)
+
+	_registry[lbl_name] = { "node": l, "type": "label", "group": group }
+
+
+func _create_graph(graph_name: String, group: String = "default") -> void:
+	if _registry.has(graph_name):
+		return
+
 	var g = debug_graph.instantiate()
 	g.name = graph_name
 	parent.add_child(g)
-	
-	# If no owner specified, try to get the caller's node
-	if owner_node == null:
-		owner_node = _get_caller_node()
-	
-	registry[graph_name] = {"node" = g, "type" = "graph", "group" = group, "owner" = owner_node}
+
+	_registry[graph_name] = { "node": g, "type": "graph", "group": group }
 
 
-func register_line(prop_name: String, id: String, color: Color, d_min: float, d_max: float, amplitude: float = 1.0) -> void:
-	if registry.has(prop_name) and registry[prop_name]["type"] == "graph":
-		registry[prop_name]["node"].populate_legend(id, color)
-		registry[prop_name]["node"].graph.add_line(id, color, d_min, d_max, amplitude)
-
-
-func register_step(graph_name: String, id: String, color: Color) -> void:
-	if registry.has(graph_name) and registry[graph_name]["type"] == "graph":
-		registry[graph_name]["node"].populate_legend(id, color)
-		registry[graph_name]["node"].graph.add_step(id, color)
-
-
-func create_label(lbl_name: String, group: String = "default", owner_node: Node = null) -> void:
-	if registry.has(lbl_name):
-		push_warning("label " + lbl_name + " already exists")
+func _register_line(graph_name: String, id: String, color: Color, d_min: float = 0.0, d_max: float = 100.0, amplitude: float = 1.0) -> void:
+	if not _registry.has(graph_name):
 		return
-	var l = Label.new()
-	l.name = lbl_name
-	parent.add_child(l)
-	
-	# If no owner specified, try to get the caller's node
-	if owner_node == null:
-		owner_node = _get_caller_node()
-	
-	registry[lbl_name] = {"node" = l, "type" = "label", "group" = group, "owner" = owner_node}
 
-
-func _get_caller_node() -> Node:
-	# Try to find the scene root as a fallback owner
-	var root = get_tree().current_scene
-	return root
-
-
-func send_args(prop_name: String, args: Dictionary = {}) -> void:
-	if not registry.has(prop_name):
+	var entry = _registry[graph_name]
+	if entry["type"] != "graph":
 		return
-	
-	var entry = registry[prop_name]
-	var node = entry["node"]
 
-	if entry["type"] == "label":
-		var text := []
-		for key in args.keys():
-			text.append("%s=%s" % [key, str(args[key])])
-		node.text = ", \t".join(text)
-	
-	if entry["type"] == "graph":
-		for key in args.keys():
-			var value = args[key]
-			if typeof(value) in [TYPE_FLOAT, TYPE_INT]:
-				node.graph.add_line_value(key, float(value))
-			elif typeof(value) == TYPE_BOOL:
-				node.graph.add_step_value(key, value)
+	var graph_node = entry["node"]
+	if graph_node.graph.lines.has(id):
+		return
+
+	graph_node.populate_legend(id, color)
+	graph_node.graph.add_line(id, color, d_min, d_max, amplitude)
+
+
+func __register_step(graph_name: String, id: String, color: Color) -> void:
+	if not _registry.has(graph_name):
+		return
+
+	var entry = _registry[graph_name]
+	if entry["type"] != "graph":
+		return
+
+	var graph_node = entry["node"]
+	if graph_node.graph.steps.has(id):
+		return
+
+	graph_node.populate_legend(id, color)
+	graph_node.graph.add_step(id, color)
+
+
+# =============================================================================
+# SCENE CHANGE HANDLER
+# =============================================================================
+
+func _on_scene_changed(removed_watches: Array, removed_signals: Array) -> void:
+	for info in removed_watches:
+		_remove_by_type(info["name"], info["type"])
+
+	for info in removed_signals:
+		_remove_by_type(info["name"], info["type"])
+		_signal_displays.erase(info["name"])
+
+	# Clean up any registry entries whose nodes have become invalid
+	var to_remove: Array = []
+	for entry_name in _registry.keys():
+		if not is_instance_valid(_registry[entry_name]["node"]):
+			to_remove.append(entry_name)
+	for entry_name in to_remove:
+		_registry.erase(entry_name)
+
+	call_deferred("_init_signal_displays")
+
+
+func _remove_by_type(name: String, display_type: int) -> void:
+	match display_type:
+		DisplayType.LABEL: _remove_display(name)
+		DisplayType.LINE: _remove_line_from_graph("signal_graph", name)
+		DisplayType._STEP: __remove_step_from_graph("signal_graph", name)
+
+
+# =============================================================================
+# CLEANUP
+# =============================================================================
+
+func _remove_display(display_name: String) -> void:
+	if _registry.has(display_name):
+		var entry = _registry[display_name]
+		if is_instance_valid(entry["node"]):
+			entry["node"].queue_free()
+		_registry.erase(display_name)
+
+	_signal_displays.erase(display_name)
+
+
+func _remove_line_from_graph(graph_name: String, line_id: String) -> void:
+	if not _registry.has(graph_name):
+		return
+
+	var entry = _registry[graph_name]
+	if entry["type"] != "graph":
+		return
+
+	var graph_node = entry["node"]
+	graph_node.graph.lines.erase(line_id)
+	graph_node.remove_legend(line_id)
+
+	if graph_node.graph.lines.is_empty() and graph_node.graph.steps.is_empty():
+		_remove_display(graph_name)
+
+
+func __remove_step_from_graph(graph_name: String, step_id: String) -> void:
+	if not _registry.has(graph_name):
+		return
+
+	var entry = _registry[graph_name]
+	if entry["type"] != "graph":
+		return
+
+	var graph_node = entry["node"]
+	graph_node.graph.steps.erase(step_id)
+	graph_node.remove_legend(step_id)
+
+	if graph_node.graph.lines.is_empty() and graph_node.graph.steps.is_empty():
+		_remove_display(graph_name)
