@@ -12,7 +12,8 @@ grow_vertical = 2
 script = ExtResource("1_dock")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
-layout_mode = 0
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -32,70 +33,63 @@ text = "No node selected"
 clip_text = true
 text_overrun_behavior = 3
 
-[node name="HSeparator2" type="HSeparator" parent="VBoxContainer"]
-layout_mode = 2
-
 [node name="SignalTree" type="Tree" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+size_flags_stretch_ratio = 1.0
 
-[node name="HSeparator3" type="HSeparator" parent="VBoxContainer"]
-layout_mode = 2
-
-[node name="AddSection" type="VBoxContainer" parent="VBoxContainer"]
-layout_mode = 2
-
-[node name="DisplayNameLabel" type="Label" parent="VBoxContainer/AddSection"]
-layout_mode = 2
-text = "Display Name (optional):"
-
-[node name="DisplayNameEdit" type="LineEdit" parent="VBoxContainer/AddSection"]
-layout_mode = 2
-placeholder_text = "Custom display name"
-
-[node name="TypeContainer" type="HBoxContainer" parent="VBoxContainer/AddSection"]
-layout_mode = 2
-
-[node name="TypeLabel" type="Label" parent="VBoxContainer/AddSection/TypeContainer"]
-layout_mode = 2
-text = "Type:"
-
-[node name="TypeOption" type="OptionButton" parent="VBoxContainer/AddSection/TypeContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-selected = 0
-item_count = 3
-popup/item_0/text = "Label"
-popup/item_0/id = 0
-popup/item_1/text = "Line (Graph)"
-popup/item_1/id = 1
-popup/item_2/text = "Step (Graph)"
-popup/item_2/id = 2
-
-[node name="ColorContainer" type="HBoxContainer" parent="VBoxContainer/AddSection"]
-layout_mode = 2
-
-[node name="ColorLabel" type="Label" parent="VBoxContainer/AddSection/ColorContainer"]
-layout_mode = 2
-text = "Color:"
-
-[node name="ColorPicker" type="ColorPickerButton" parent="VBoxContainer/AddSection/ColorContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-color = Color(0, 1, 0.5, 1)
-
-[node name="HSeparator4" type="HSeparator" parent="VBoxContainer"]
+[node name="HSeparator2" type="HSeparator" parent="VBoxContainer"]
 layout_mode = 2
 
 [node name="RegisteredLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2
 text = "Registered Signals:"
 
-[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer"]
+[node name="RegisteredTree" type="Tree" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+size_flags_stretch_ratio = 1.0
 
-[node name="RegisteredList" type="VBoxContainer" parent="VBoxContainer/ScrollContainer"]
+[node name="HSeparator3" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="EditSection" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="EditLabel" type="Label" parent="VBoxContainer/EditSection"]
+layout_mode = 2
+text = "Edit Signal:"
+
+[node name="DisplayNameContainer" type="HBoxContainer" parent="VBoxContainer/EditSection"]
+layout_mode = 2
+
+[node name="DisplayNameLabel" type="Label" parent="VBoxContainer/EditSection/DisplayNameContainer"]
+layout_mode = 2
+text = "Name:"
+
+[node name="DisplayNameEdit" type="LineEdit" parent="VBoxContainer/EditSection/DisplayNameContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 3
+
+[node name="TypeContainer" type="HBoxContainer" parent="VBoxContainer/EditSection"]
+layout_mode = 2
+
+[node name="TypeLabel" type="Label" parent="VBoxContainer/EditSection/TypeContainer"]
+layout_mode = 2
+text = "Type:"
+
+[node name="TypeOption" type="OptionButton" parent="VBoxContainer/EditSection/TypeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ColorContainer" type="HBoxContainer" parent="VBoxContainer/EditSection"]
+layout_mode = 2
+
+[node name="ColorLabel" type="Label" parent="VBoxContainer/EditSection/ColorContainer"]
+layout_mode = 2
+text = "Color:"
+
+[node name="ColorPicker" type="ColorPickerButton" parent="VBoxContainer/EditSection/ColorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+color = Color(0, 1, 0.5, 1)

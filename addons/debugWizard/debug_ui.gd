@@ -62,7 +62,7 @@ func _ensure_display_exists(label: String, display_type: int, color: Color) -> v
 	match display_type:
 		DisplayType.LABEL:
 			if not _registry.has(label):
-				_create_label(label)
+				_create_label(label, color)
 		DisplayType.LINE:
 			if not _registry.has("signal_graph"):
 				_create_graph("signal_graph")
@@ -132,14 +132,15 @@ func __update_step(label: String, value) -> void:
 
 func _on_event_dispatched(category: String, data: Dictionary) -> void:
 	var display_type: int = data.get("_type", DisplayType.LABEL)
+	var color: Color = data.get("color", Color.WHITE)
 
 	match display_type:
 		DisplayType.LABEL:
-			_ensure_display_exists(category, DisplayType.LABEL, Color.WHITE)
+			_ensure_display_exists(category, DisplayType.LABEL, color)
 			if _registry.has(category) and _registry[category]["type"] == "label":
 				var text_parts: Array = []
 				for key in data.keys():
-					if key.begins_with("_"):
+					if key.begins_with("_") or key == "color":
 						continue
 					var val = data[key]
 					if typeof(val) == TYPE_FLOAT:
@@ -148,11 +149,11 @@ func _on_event_dispatched(category: String, data: Dictionary) -> void:
 				_registry[category]["node"].text = ", ".join(text_parts)
 
 		DisplayType.LINE:
-			_ensure_display_exists(category, DisplayType.LINE, data.get("color", Color.WHITE))
+			_ensure_display_exists(category, DisplayType.LINE, color)
 			_update_line(category, data.get("value", 0.0))
 
 		DisplayType._STEP:
-			_ensure_display_exists(category, DisplayType._STEP, data.get("color", Color.WHITE))
+			_ensure_display_exists(category, DisplayType._STEP, color)
 			__update_step(category, data.get("triggered", true))
 
 
@@ -160,16 +161,17 @@ func _on_event_dispatched(category: String, data: Dictionary) -> void:
 # CREATE UI ELEMENTS
 # =============================================================================
 
-func _create_label(lbl_name: String, group: String = "default") -> void:
+func _create_label(lbl_name: String, color: Color = Color.WHITE, group: String = "default") -> void:
 	if _registry.has(lbl_name):
 		return
 
 	var l = Label.new()
 	l.name = lbl_name
 	l.text = lbl_name + ": --"
+	l.add_theme_color_override("font_color", color)
 	parent.add_child(l)
 
-	_registry[lbl_name] = { "node": l, "type": "label", "group": group }
+	_registry[lbl_name] = { "node": l, "type": "label", "group": group, "color": color }
 
 
 func _create_graph(graph_name: String, group: String = "default") -> void:

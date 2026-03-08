@@ -211,16 +211,27 @@ func _resolve_connections() -> void:
 # SIGNAL HANDLERS
 # =============================================================================
 
+func _get_color_for_display(display_name: String) -> Color:
+	for unique_id in _signal_connections.keys():
+		var data = _signal_connections[unique_id]
+		if data["display_name"] == display_name:
+			return data["color"]
+	return Color.WHITE
+
+
 func _on_signal_label(value, display_name: String) -> void:
 	var formatted = value
 	if typeof(value) == TYPE_FLOAT:
 		formatted = "%.2f" % value
-	dispatch(display_name, { display_name: formatted, "_type": DisplayType.LABEL })
+	var color = _get_color_for_display(display_name)
+	dispatch(display_name, { display_name: formatted, "_type": DisplayType.LABEL, "color": color })
 
 
 func _on_signal_line(value: float, display_name: String) -> void:
-	dispatch(display_name, { "value": value, "_type": DisplayType.LINE })
+	var color = _get_color_for_display(display_name)
+	dispatch(display_name, { "value": value, "_type": DisplayType.LINE, "color": color })
 
 
 func _on_signal_step(triggered: bool, display_name: String) -> void:
-	dispatch(display_name, { "triggered": triggered, "_type": DisplayType._STEP })
+	var color = _get_color_for_display(display_name)
+	dispatch(display_name, { "triggered": triggered, "_type": DisplayType._STEP, "color": color })
